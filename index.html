@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Assessment World Model</title>
+<link rel="stylesheet" href="site.css">
+<body>
+<nav class="top">
+  <span class="brand">AWM</span>
+  <a href="index.html" aria-current="page">Home</a>
+  <a href="assemble.html">Assemble</a>
+  <a href="exam.html">Exam paper</a>
+  <a href="https://github.com/khkreddy/AWM">Repository</a>
+</nav>
+<div class="wrap">
+  <h1>Assessment World Model</h1>
+  <p class="sub">A public, static demonstration of sheaf-aligned assessment data and
+    <b>deterministic retrieval</b>. No model runs in this browser. Chemistry is the
+    first subject with a curriculum map; a node id is enough to retrieve map +
+    supplement + questions and typeset an exam paper.</p>
+  <div class="claim">
+    Join key for chemistry: <code>map.node.id = supplement.node_id = question.node_ids[]</code>.
+    Filter, sort by <code>item_uid</code>, optional seeded shuffle. Same query JSON → same paper.
+  </div>
+  <div class="banner" id="banner"></div>
+  <div class="grid" id="cards"></div>
+  <p class="muted" id="packed"></p>
+</div>
+<footer class="site">Misconception prose, examiner comments, and source-paper crops are withheld.
+  Cambridge item wording is for this working demonstration of retrieval, not a republished past-paper pack.</footer>
+<script>
+fetch("status.json").then(r=>r.json()).then(S=>{
+  const subj=S.subjects||{};
+  const order=["chemistry","physics","biology","mathematics"];
+  const href={chemistry:"assemble.html",physics:"exam.html?subject=physics",biology:"exam.html?subject=biology",mathematics:"exam.html?subject=mathematics"};
+  document.getElementById("packed").textContent="Packed "+(S.packed_at||"");
+  document.getElementById("banner").innerHTML =
+    `<span class="stat"><b>${(subj.chemistry||{}).items||0}</b> chemistry</span>
+     <span class="stat"><b>${(subj.physics||{}).items||0}</b> physics</span>
+     <span class="stat"><b>${(subj.biology||{}).items||0}</b> biology</span>
+     <span class="stat">math not in CMS A/B</span>`;
+  document.getElementById("cards").innerHTML = order.map(k=>{
+    const s=subj[k]||{};
+    const n=s.items||0;
+    const map = k==="chemistry" ? `${s.map_nodes||0} nodes · ${s.bound||0} bound questions · ${s.supplement||0} supplement` : (s.status||"");
+    const extra = k==="chemistry" ? "Map-aware assemble / test maker" : "Board / year / format only";
+    return `<a class="card" href="${href[k]}" style="text-decoration:none;color:inherit">
+      <h2>${k}</h2><div class="n">${n}</div><p>${map}</p><p>${extra}</p></a>`;
+  }).join("");
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Assemble · chemistry map RAG</title>
+<link rel="stylesheet" href="site.css">
+<body>
+<nav class="top">
+  <span class="brand">AWM</span>
+  <a href="index.html">Home</a>
+  <a href="assemble.html" aria-current="page">Assemble</a>
+  <a href="exam.html?subject=chemistry">Exam paper</a>
+</nav>
+<div class="wrap">
+  <h1>Chemistry assemble</h1>
+  <p class="sub">Pick a map node. The page joins statements, supplement evidence, and CMS questions
+    on that id, then typesets a paper. Physics and biology cannot use this page yet — they have no map.</p>
+  <div class="card">
+    <div class="row">
+      <div><label for="node">Map node</label><select id="node"></select></div>
+      <div><label for="board">Board</label>
+        <select id="board"><option value="">any</option></select></div>
+      <div><label for="fmt">Format</label>
+        <select id="fmt"><option value="">any</option></select></div>
+      <div><label for="n">N questions</label><input id="n" type="number" value="10" min="1" max="40"></div>
+      <div><label for="seed">Seed (empty = uid order)</label><input id="seed" placeholder="optional"></div>
+    </div>
+    <p style="margin:12px 0 0">
+      <button id="paper" type="button">Make exam paper</button>
+      <button id="quiz" class="sec" type="button">Make quiz (same retrieve, N as set)</button>
+    </p>
+    <p class="muted" id="hash"></p>
+  </div>
+  <div class="card" id="sheaf"></div>
+</div>
+<footer class="site">Deterministic: pool sorted by item_uid; shuffle is mulberry32 on the seed.
+  Two clicks with the same fields produce the same result_hash.</footer>
+<script src="rag.js"></script>
+<script>
+let MAP, SUP, Q;
+Promise.all([
+  fetch("chemistry/map.json").then(r=>r.json()),
+  fetch("chemistry/supplement.json").then(r=>r.json()),
+  fetch("chemistry/questions.json").then(r=>r.json()),
+]).then(([map, sup, q])=>{
+  MAP=map; SUP=sup; Q=q.items||q;
+  const sel=document.getElementById("node");
+  (map.nodes||[]).forEach(n=>{
+    const o=document.createElement("option");
+    o.value=n.id; o.textContent=n.id+" — "+(n.title||"");
+    sel.appendChild(o);
+  });
+  const boards=[...new Set(Q.map(x=>x.qualification).filter(Boolean))].sort();
+  const fmts=[...new Set(Q.map(x=>x.format).filter(Boolean))].sort();
+  boards.forEach(b=>{const o=document.createElement("option"); o.value=b; o.textContent=b; document.getElementById("board").appendChild(o);});
+  fmts.forEach(b=>{const o=document.createElement("option"); o.value=b; o.textContent=b; document.getElementById("fmt").appendChild(o);});
+  const pick=new URLSearchParams(location.search).get("node");
+  if(pick) sel.value=pick;
+  renderSheaf();
+  sel.onchange=renderSheaf;
+});
+function renderSheaf(){
+  const id=document.getElementById("node").value;
+  const sh=AWMRag.sheaf(MAP, SUP, {items:Q}, id);
+  const n=sh.node||{};
+  const st=(sh.statements||[]).slice(0,5);
+  const su=(sh.supplement||[]).slice(0,3);
+  document.getElementById("sheaf").innerHTML = `
+    <h2>${esc(n.id||id)}</h2>
+    <p><b>${esc(n.title||"")}</b></p>
+    <p class="muted">${esc(n.mechanism||"")}</p>
+    <div class="banner">
+      <span class="stat"><b>${sh.n_statements}</b> syllabus statements</span>
+      <span class="stat"><b>${sh.n_supplement}</b> supplement</span>
+      <span class="stat"><b>${sh.n_questions}</b> questions on this node</span>
+    </div>
+    <h3>Statements (first 5)</h3>
+    <ul class="plain">${st.map(s=>`<li><span class="muted">${esc(s.board||"")}</span> ${esc(s.statement||"")}</li>`).join("")||"<li class='muted'>none</li>"}</ul>
+    <h3>Supplement (first 3)</h3>
+    <ul class="plain">${su.map(s=>`<li>${esc(s.evidence_statement||s.item_id||"")}</li>`).join("")||"<li class='muted'>none</li>"}</ul>
+  `;
+}
+function query(limit){
+  return {
+    node: document.getElementById("node").value,
+    board: document.getElementById("board").value,
+    format: document.getElementById("fmt").value,
+    limit: Number(document.getElementById("n").value||limit),
+    seed: document.getElementById("seed").value,
+  };
+}
+function go(kind){
+  const q=query(10);
+  const r=AWMRag.retrieve(Q, q);
+  document.getElementById("hash").textContent =
+    `pool ${r.n_pool} · taken ${r.n} · result_hash ${r.result_hash}`;
+  sessionStorage.setItem("awm_paper", JSON.stringify({
+    subject:"chemistry", kind, query:r.query, uids:r.uids, hash:r.result_hash,
+    node:q.node, title: kind==="quiz" ? "Quiz" : "Assembled paper",
+  }));
+  location.href="exam.html?bundle=1&subject=chemistry";
+}
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+document.getElementById("paper").onclick=()=>go("paper");
+document.getElementById("quiz").onclick=()=>go("quiz");
+</script>
+</body>
+</html>

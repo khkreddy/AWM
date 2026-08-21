@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exam paper · AWM</title>
+<link rel="stylesheet" href="paper.css">
+<body class="exam" data-subject="chemistry">
+<div id="chrome">
+  <div class="row">
+    <a href="index.html" style="color:#e8ece9;text-decoration:none;font-weight:700;margin-right:8px">AWM</a>
+    <a href="assemble.html" style="color:#c5d4ce;text-decoration:none;font-size:13px">Assemble</a>
+    <label>Subject
+      <select id="subject">
+        <option value="chemistry">chemistry</option>
+        <option value="physics">physics</option>
+        <option value="biology">biology</option>
+        <option value="mathematics">mathematics</option>
+      </select>
+    </label>
+    <label>Jump <input id="jump" placeholder="uid" size="28"></label>
+    <label>Board <select id="board"><option value="">any</option></select></label>
+    <label>Node <select id="node"><option value="">all / no map</option></select></label>
+    <button id="prev" class="sec" type="button">Prev</button>
+    <button id="next" type="button">Next</button>
+    <button id="one" class="sec" type="button">One item</button>
+    <button id="paper" type="button">Paper from filter</button>
+    <button id="key" class="sec" type="button">Show key</button>
+  </div>
+  <div id="meta"></div>
+</div>
+<article class="paper" id="paper"></article>
+<script src="rag.js"></script>
+<script src="exam.js"></script>
+<script>
+let ITEMS=[], VIEW=[], idx=0, showKey=false, mode="one", META={};
+const params=new URLSearchParams(location.search);
+function subject(){ return document.getElementById("subject").value; }
+function load(){
+  const sub=params.get("subject")||document.getElementById("subject").value||"chemistry";
+  document.getElementById("subject").value=sub;
+  document.body.setAttribute("data-subject", sub);
+  const qurl=sub+"/questions.json";
+  const extra = sub==="chemistry" ? fetch("chemistry/nodes.json").then(r=>r.json()).catch(()=>({nodes:[]})) : Promise.resolve({nodes:[]});
+  return Promise.all([fetch(qurl).then(r=>r.json()), extra]).then(([data, nodes])=>{
+    ITEMS=data.items||[];
+    const boards=[...new Set(ITEMS.map(x=>x.qualification).filter(Boolean))].sort();
+    const bs=document.getElementById("board");
+    bs.innerHTML='<option value="">any</option>';
+    boards.forEach(b=>{const o=document.createElement("option"); o.value=b; o.textContent=b; bs.appendChild(o);});
+    const ns=document.getElementById("node");
+    ns.innerHTML='<option value="">all / no map</option>';
+    (nodes.nodes||[]).forEach(n=>{
+      const o=document.createElement("option"); o.value=n.id; o.textContent=n.id; ns.appendChild(o);
+    });
+    if(params.get("node")) ns.value=params.get("node");
+    if(params.get("board")) bs.value=params.get("board");
+    if(params.get("bundle")==="1"){
+      const raw=sessionStorage.getItem("awm_paper");
+      if(raw){
+        const b=JSON.parse(raw);
+        const set=new Set(b.uids||[]);
+        VIEW=ITEMS.filter(it=>set.has(it.item_uid));
+        VIEW.sort((a,c)=> (b.uids||[]).indexOf(a.item_uid)-(b.uids||[]).indexOf(c.item_uid));
+        mode="paper";
+        META={subject:sub, paper_name:b.title||"Assembled paper", node:b.node, hash:b.hash, n:VIEW.length, qualification:b.query&&b.query.board};
+        render();
+        return;
+      }
+    }
+    if(params.get("uid")){
+      VIEW=ITEMS;
+      const i=VIEW.findIndex(it=>it.item_uid===params.get("uid"));
+      idx=i>=0?i:0; mode="one"; render(); return;
+    }
+    applyFilter();
+  }).catch(()=>{
+    document.getElementById("paper").innerHTML="<p>No public items for this subject yet.</p>";
+    document.getElementById("meta").textContent="0 items";
+  });
+}
+function applyFilter(){
+  const q={
+    node: document.getElementById("node").value,
+    board: document.getElementById("board").value,
+    limit: 9999,
+  };
+  const r=AWMRag.retrieve(ITEMS, q);
+  VIEW=r.items; idx=0; mode="one";
+  META={subject:subject(), hash:r.result_hash, n:VIEW.length, node:q.node, qualification:q.board};
+  render();
+}
+function render(){
+  const meta=document.getElementById("meta");
+  if(!VIEW.length){
+    document.getElementById("paper").innerHTML="<p>No items in this filter. Mathematics has no CMS Grade A/B items yet. Physics/biology have no map node join.</p>";
+    meta.textContent="0 of 0";
+    return;
+  }
+  if(mode==="paper"){
+    document.getElementById("paper").innerHTML=AWMExam.paperHTML(VIEW, META, showKey);
+    meta.textContent=`paper ${VIEW.length} items · ${META.hash||""}`;
+    return;
+  }
+  const it=VIEW[idx];
+  META.paper_name="Single item";
+  document.getElementById("paper").innerHTML=AWMExam.paperHTML([it], Object.assign({}, META, {n:1}), showKey);
+  meta.textContent=`${idx+1} / ${VIEW.length} · ${it.item_uid} · pool ${ITEMS.length}`;
+}
+document.getElementById("next").onclick=()=>{ if(mode==="paper") return; if(idx<VIEW.length-1){ idx++; render(); }};
+document.getElementById("prev").onclick=()=>{ if(mode==="paper") return; if(idx>0){ idx--; render(); }};
+document.getElementById("one").onclick=()=>{ mode="one"; render(); };
+document.getElementById("paper").onclick=()=>{
+  const q={node:document.getElementById("node").value, board:document.getElementById("board").value, limit:15};
+  const r=AWMRag.retrieve(ITEMS, q);
+  VIEW=r.items; mode="paper";
+  META={subject:subject(), paper_name:"Assembled paper", node:q.node, hash:r.result_hash, n:VIEW.length, qualification:q.board};
+  render();
+};
+document.getElementById("key").onclick=()=>{ showKey=!showKey; render(); };
+document.getElementById("subject").onchange=()=>{ location.href="exam.html?subject="+encodeURIComponent(subject()); };
+document.getElementById("board").onchange=applyFilter;
+document.getElementById("node").onchange=applyFilter;
+document.getElementById("jump").addEventListener("keydown", e=>{
+  if(e.key!=="Enter") return;
+  const s=e.target.value.trim();
+  const i=VIEW.findIndex(it=>it.item_uid===s || it.item_uid.endsWith(s));
+  if(i>=0){ mode="one"; idx=i; render(); }
+});
+load();
+</script>
+</body>
+</html>
