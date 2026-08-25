@@ -2,7 +2,7 @@
 
 **Live:** https://khkreddy.github.io/AWM/
 
-Packed `2026-08-24T22:21:53Z`. Public, static, zero model calls at page load.
+Packed `2026-08-25T04:24:30Z`. Public, static, zero model calls at page load.
 
 This page is a **sheaf plus a retrieval engine**. A sheaf here means one id grammar
 and joins by equality: map node id = supplement node id = question `node_ids[]`.
